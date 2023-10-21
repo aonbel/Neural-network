@@ -16,12 +16,6 @@ static const int DefaultSize = 16;
 static const int MaxOffsetForB = 2;
 static const int MaxOffsetForSynapses = 2;
 
-long double ReturnRandomValueFrom(long double lowerBound, long double upperBound);
-
-long double TakeRandomFromTwoAndAddMutation(long double firstParameter, long double secondParameter, long double mutationChance, long double mutationMax);
-
-long double TakeRandomFromTwo(long double firstParameter, long double secondParameter);
-
 class neuron
 {
 public:

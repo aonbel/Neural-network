@@ -9,6 +9,11 @@
 #include <future>
 #include <chrono>
 
+long double sigmoid(long double x)
+{
+	return 1. / (1. + exp(-x));
+}
+
 long double ReturnRandomValueFrom(long double lowerBound, long double upperBound)
 {
 	return ((long double)rnd() / rnd.max()) * (upperBound - lowerBound) + lowerBound;
@@ -305,10 +310,6 @@ long double* network::GetOutput()
 
 void network::Process()
 {
-	for (int i = 0; i < numberOfInputNeurons; i++)
-	{
-		inputNeurons[i].x = 0;
-	}
 	for (int i = 0; i < numberOfLayers; i++)
 	{
 		for (int j = 0; j < numberOfLayerNeurons; j++)
@@ -333,7 +334,7 @@ void network::Process()
 	{
 		for (int j = 0; j < numberOfLayerNeurons; j++)
 		{
-			layerNeurons[i][j].x = 1. / (1. + exp(-layerNeurons[i][j].x + layerNeurons[i][j].b));
+			layerNeurons[i][j].x = sigmoid(layerNeurons[i][j].x + layerNeurons[i][j].b);
 
 			for (int k = 0; k < numberOfLayerNeurons; k++)
 			{
@@ -344,7 +345,7 @@ void network::Process()
 
 	for (int i = 0; i < numberOfLayerNeurons; i++)
 	{
-		layerNeurons[numberOfLayers - 1][i].x = 1. / (1. + exp(-layerNeurons[numberOfLayers - 1][i].x + layerNeurons[numberOfLayers - 1][i].b));
+		layerNeurons[numberOfLayers - 1][i].x = sigmoid(layerNeurons[numberOfLayers - 1][i].x + layerNeurons[numberOfLayers - 1][i].b);
 
 		for (int j = 0; j < numberOfEndNeurons; j++)
 		{
@@ -354,7 +355,7 @@ void network::Process()
 
 	for (int j = 0; j < numberOfEndNeurons; j++)
 	{
-		outputNeurons[j].x = 1. / (1. + exp(-outputNeurons[j].b + outputNeurons[j].x));
+		outputNeurons[j].x = sigmoid(outputNeurons[j].x + outputNeurons[j].b);
 	}
 }
 
@@ -403,30 +404,13 @@ void genetic::LearnAtSample(long double* input, int estimatedResult, int inputSi
 	if (inputSize != numberOfInputNeurons || numberOfNeuralNetworks < 2 + randomNetworksCount) return;
 
 	std::vector<pair> all;
-
 	long long currentThread = 0;
 
 	for (int i = 0; i < numberOfNeuralNetworks; i++)
 	{
 		networks[i].SetInput(input, inputSize);
-
-		while (threads[currentThread].joinable())
-		{
-			currentThread++;
-			if (currentThread == threadsCount) currentThread = 0;
-		}
-
-		threads[currentThread] = std::thread(&network::Process, this->networks[i]);
-		threads[currentThread].detach();
-	}
-
-	currentThread = 0;
-	while (currentThread < threadsCount)
-	{
-		if (!threads[currentThread].joinable())
-		{
-			currentThread++;
-		}
+		
+		networks[i].Process();
 	}
 
 	for (int i = 0; i < numberOfNeuralNetworks; i++)
@@ -434,7 +418,7 @@ void genetic::LearnAtSample(long double* input, int estimatedResult, int inputSi
 		all.push_back({ evaluate(networks[i].GetOutput(), estimatedResult), i });
 	}
 
-	std::sort(all.begin(), all.end(), [](pair a, pair b) {return a.left > b.left; });
+	std::sort(all.begin(), all.end(), [](pair a, pair b) {return a.left < b.left; });
 
 	while (numberToReproduce * (numberToReproduce + 1) / 2 + randomNetworksCount < numberOfNeuralNetworks)
 	{
@@ -448,16 +432,8 @@ void genetic::LearnAtSample(long double* input, int estimatedResult, int inputSi
 	{
 		for (int j = i + 1; j < numberToReproduce; j++)
 		{
-			while (threads[currentThread].joinable())
-			{
-				currentThread++;
-				if (currentThread == threadsCount) currentThread = 0;
-			}
-
-			if (j != numberToReproduce - 1) threads[currentThread] = std::thread(&network::SetWeightsFromParents, this->newNetworks[currIterator], networks[all[i].right], networks[all[j].right], mutationChance * (1 - std::min(all[i].left, all[j].left)), mutationMax * (1 - std::min(all[i].left, all[j].left)));
-			else threads[currentThread] = std::thread(&network::SetWeightsFromNetwork, this->newNetworks[currIterator], networks[i]);
-
-			threads[currentThread].detach();
+			if (j != numberToReproduce - 1) newNetworks[currIterator].SetWeightsFromParents(networks[all[i].right], networks[all[j].right], mutationChance * std::min(all[i].left, all[j].left), mutationMax * std::min(all[i].left, all[j].left));
+			else newNetworks[currIterator].SetWeightsFromNetwork(networks[all[i].right]);
 
 			currIterator++;
 		}
@@ -468,15 +444,6 @@ void genetic::LearnAtSample(long double* input, int estimatedResult, int inputSi
 		newNetworks[currIterator].SetWeightsRandom();
 
 		currIterator++;
-	}
-
-	currentThread = 0;
-	while (currentThread < threadsCount)
-	{
-		if (!threads[currentThread].joinable())
-		{
-			currentThread++;
-		}
 	}
 
 	for (int i = 0; i < numberOfNeuralNetworks; i++) networks[i].SetWeightsFromNetwork(newNetworks[i]);
